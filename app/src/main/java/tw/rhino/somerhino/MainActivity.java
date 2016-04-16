@@ -1,22 +1,27 @@
 package tw.rhino.somerhino;
 
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
 
 import org.mozilla.javascript.Context;
-import org.mozilla.javascript.ErrorReporter;
-import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.commonjs.module.ModuleScope;
 import org.mozilla.javascript.commonjs.module.ModuleScriptProvider;
 import org.mozilla.javascript.commonjs.module.Require;
 import org.mozilla.javascript.commonjs.module.RequireBuilder;
-import org.mozilla.javascript.commonjs.module.provider.*;
-import org.mozilla.javascript.tools.shell.Global;
+import org.mozilla.javascript.commonjs.module.provider.ModuleSource;
+import org.mozilla.javascript.commonjs.module.provider.ModuleSourceProvider;
+import org.mozilla.javascript.commonjs.module.provider.ModuleSourceProviderBase;
+import org.mozilla.javascript.commonjs.module.provider.SoftCachingModuleScriptProvider;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -75,6 +80,7 @@ public class MainActivity extends AppCompatActivity {
 
             Reader reader = new BufferedReader(new InputStreamReader(
                 activityContext.getAssets().open(moduleMap.get(moduleId))));
+
             return new ModuleSource(
                     reader,
                     null,
@@ -93,103 +99,42 @@ public class MainActivity extends AppCompatActivity {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                something();
+              try {
+                something("main.js");
+              } catch (URISyntaxException e) {
+                e.printStackTrace();
+              }
             }
         }).start();
 
     }
 
-    public void something() {
-        ModuleSourceProvider sourceProvider = new AssetModuleProvider(this);
-        ModuleScriptProvider scriptProvider = new SoftCachingModuleScriptProvider(sourceProvider);
-        RequireBuilder builder = new RequireBuilder();
-        builder.setModuleScriptProvider(scriptProvider);
+    public void something(String fileName) throws URISyntaxException {
+      ModuleSourceProvider sourceProvider = new AssetModuleProvider(this);
+      ModuleScriptProvider scriptProvider = new SoftCachingModuleScriptProvider(sourceProvider);
+      RequireBuilder builder = new RequireBuilder();
+      builder.setModuleScriptProvider(scriptProvider);
 
-        Context context = Context.enter();
-        try {
-            context.setOptimizationLevel(-1);
-            Scriptable scope = context.initStandardObjects();
-            Require require = builder.createRequire(context, scope);
-            require.install(scope);
-            System.out.println("result1 : " + executeFile(context, scope, "main.js"));
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            Context.exit();
-        }
-    }
+      Context context = Context.enter();
+      try {
+        context.setOptimizationLevel(-1);
+        Scriptable scope = context.initStandardObjects();
 
-    private void oldThing() {
-        System.out.println("This is main");
-        Global global = new Global();
-        Context context = Context.enter();
-        try {
-            context.setOptimizationLevel(-1);
-            context.setErrorReporter(getErrorReporter());
-            Scriptable scope = context.initStandardObjects();
+        Require require = builder.createRequire(context, scope);
+        require.install(scope);
 
-            List<String> modulesPath = Arrays.asList("file:///android_asset/modules/math");
-            Require require = global.installRequire(context, modulesPath, false);
-            require.install(scope);
+        Reader reader = new BufferedReader(new InputStreamReader(getAssets().open(fileName)));
 
-//      System.out.println("result2 : " + executeFile(context, scope, "modules/modules.math/add.js"));
-//      System.out.println("result2 : " + executeFile(context, scope, "modules/modules.math/subtract.js"));
+        ModuleScope scope1 = new ModuleScope(scope, new URI(fileName), null);
+        Object result = context.evaluateReader(scope1, reader, fileName, 0, null);
 
-            System.out.println("result1 : " + executeFile(context, scope, "main.js"));
+        String value = context.toString(result);
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            Context.exit();
-        }
-    }
-
-
-    private ErrorReporter getErrorReporter() {
-        return new ErrorReporter() {
-            @Override
-            public void warning(String s, String s1, int i, String s2, int i1) {
-                System.out.println(s + ":" + s1 + ":" + i + ":" + s2 + ":" + i1);
-            }
-
-            @Override
-            public void error(String s, String s1, int i, String s2, int i1) {
-                System.out.println(s + ":" + s1 + ":" + i + ":" + s2 + ":" + i1);
-            }
-
-            @Override
-            public EvaluatorException runtimeError(String s, String s1, int i, String s2, int i1) {
-                System.out.println(s + ":" + s1 + ":" + i + ":" + s2 + ":" + i1);
-                return null;
-            }
-        };
-    }
-
-    private String executeFile(Context context, Scriptable scope, String fileName) throws IOException {
-        String content = readFile1(fileName);
-        Reader source = new BufferedReader(new InputStreamReader(getAssets().open(fileName)));
-        Object result = context.evaluateReader(scope, source, fileName, 0, null);
-
-//        Object result = context.evaluateString(scope, content, fileName, 1, null);
-        return context.toString(result);
-    }
-
-    private  String readFile(String fileName) throws IOException {
-        BufferedReader reader = new BufferedReader(new FileReader(new File(fileName)));
-        String line;
-        String content = "";
-        while ((line = reader.readLine()) != null) {
-            content += line;
-        }
-        return content;
-    }
-    private  String readFile1(String fileName) throws IOException {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(getAssets().open(fileName)));
-        String line;
-        String content = "";
-        while ((line = reader.readLine()) != null) {
-            content += line;
-        }
-        return content;
+        System.out.println("result1 : " + value);
+      } catch (IOException e) {
+        e.printStackTrace();
+      } finally {
+        Context.exit();
+      }
     }
 }
